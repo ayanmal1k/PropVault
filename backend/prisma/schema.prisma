@@ -1,0 +1,586 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  AGENT
+  AGENCY_ADMIN
+  ADMIN
+}
+
+enum ListingPurpose {
+  SALE
+  RENT
+}
+
+enum PropertyCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  PLOT
+  PROJECT
+}
+
+enum PropertyStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  REJECTED
+  SOLD
+  RENTED
+  EXPIRED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum ReportStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  avatar        String?
+  role          UserRole  @default(USER)
+  locale        String    @default("en")
+  darkMode      Boolean   @default(false)
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  refreshToken  String?
+  stripeCustomerId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  agent         Agent?
+  favorites     Favorite[]
+  savedSearches SavedSearch[]
+  messages      Message[]      @relation("UserMessages")
+  sentMessages  Message[]      @relation("SentMessages")
+  reviews       Review[]
+  reports       Report[]
+  blogPosts     BlogPost[]
+  notifications Notification[]
+  chatRooms     ChatParticipant[]
+  chatMessages  ChatMessage[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+model Agency {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  coverImage  String?
+  description String?
+  email       String
+  phone       String
+  website     String?
+  address     String?
+  cityId      String?
+  city        City?    @relation(fields: [cityId], references: [id])
+  verified    Boolean  @default(false)
+  featured    Boolean  @default(false)
+  rating      Float    @default(0)
+  reviewCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agents     Agent[]
+  properties Property[]
+  subscription Subscription?
+
+  @@map("agencies")
+}
+
+model Agent {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agencyId    String?
+  agency      Agency?  @relation(fields: [agencyId], references: [id])
+  licenseNo   String?
+  bio         String?
+  languages   String   @default("[]")
+  whatsapp    String?
+  verified    Boolean  @default(false)
+  featured    Boolean  @default(false)
+  rating      Float    @default(0)
+  reviewCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  properties Property[]
+  leads      Lead[]
+  reviews    Review[]
+
+  @@map("agents")
+}
+
+model City {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  country   String   @default("Pakistan")
+  latitude  Float?
+  longitude Float?
+  featured  Boolean  @default(false)
+  image     String?
+  createdAt DateTime @default(now())
+
+  areas      Area[]
+  agencies   Agency[]
+  properties Property[]
+  areaGuides AreaGuide[]
+
+  @@map("cities")
+}
+
+model Area {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  cityId    String
+  city      City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+
+  properties Property[]
+  areaGuides AreaGuide[]
+
+  @@unique([cityId, slug])
+  @@map("areas")
+}
+
+model PropertyType {
+  id       String           @id @default(cuid())
+  name     String
+  slug     String           @unique
+  category PropertyCategory
+  icon     String?
+
+  properties Property[]
+
+  @@map("property_types")
+}
+
+model Amenity {
+  id         String @id @default(cuid())
+  name       String
+  slug       String @unique
+  icon       String?
+  category   String?
+
+  properties PropertyAmenity[]
+
+  @@map("amenities")
+}
+
+model Property {
+  id              String           @id @default(cuid())
+  title           String
+  slug            String           @unique
+  description     String
+  purpose         ListingPurpose
+  category        PropertyCategory
+  status          PropertyStatus   @default(PENDING)
+  verification    VerificationStatus @default(UNVERIFIED)
+
+  price           Float
+  pricePerUnit    Float?
+  currency        String           @default("PKR")
+  rentPeriod      String?
+
+  bedrooms        Int?
+  bathrooms       Int?
+  areaSize        Float
+  areaUnit        String           @default("MARLA")
+
+  address         String
+  latitude        Float
+  longitude       Float
+
+  cityId          String
+  city            City             @relation(fields: [cityId], references: [id])
+  areaId          String?
+  area            Area?            @relation(fields: [areaId], references: [id])
+  propertyTypeId  String
+  propertyType    PropertyType     @relation(fields: [propertyTypeId], references: [id])
+
+  agencyId        String?
+  agency          Agency?          @relation(fields: [agencyId], references: [id])
+  agentId         String?
+  agent           Agent?           @relation(fields: [agentId], references: [id])
+  projectId       String?
+  project         Project?         @relation(fields: [projectId], references: [id])
+
+  featured        Boolean          @default(false)
+  trending        Boolean          @default(false)
+  views           Int              @default(0)
+  aiPriceEstimate Float?
+  roiPercent      Float?
+
+  images          PropertyImage[]
+  videos          PropertyVideo[]
+  amenities       PropertyAmenity[]
+  nearbyPlaces    NearbyPlace[]
+  favorites       Favorite[]
+  leads           Lead[]
+  reviews         Review[]
+  reports         Report[]
+
+  virtualTourUrl  String?
+  videoTourUrl    String?
+  floorPlanUrl    String?
+
+  furnishingStatus String?
+  possessionStatus String?
+  builtYear        Int?
+  floorsCount      Int?
+  facingDirection  String?
+
+  metaTitle       String?
+  metaDescription String?
+
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([cityId, purpose, category, status])
+  @@index([price])
+  @@index([featured])
+  @@index([latitude, longitude])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String?
+  order      Int      @default(0)
+  isPrimary  Boolean  @default(false)
+
+  @@map("property_images")
+}
+
+model PropertyVideo {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url        String
+  type       String   @default("tour")
+
+  @@map("property_videos")
+}
+
+model PropertyAmenity {
+  propertyId String
+  amenityId  String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  amenity    Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, amenityId])
+  @@map("property_amenities")
+}
+
+model NearbyPlace {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String
+  type       String
+  distance   Float
+  unit       String   @default("km")
+
+  @@map("nearby_places")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String
+  developer   String?
+  cityId      String
+  areaId      String?
+  coverImage  String?
+  images      String   @default("[]")
+  minPrice    Float?
+  maxPrice    Float?
+  handover    String?
+  featured    Boolean  @default(false)
+  status      String   @default("ONGOING")
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  properties Property[]
+
+  @@map("projects")
+}
+
+model Subscription {
+  id               String           @id @default(cuid())
+  agencyId         String           @unique
+  agency           Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  plan             SubscriptionPlan @default(FREE)
+  stripeSubId      String?
+  stripePriceId    String?
+  listingsLimit    Int              @default(5)
+  featuredSlots    Int              @default(0)
+  startsAt         DateTime         @default(now())
+  endsAt           DateTime?
+  active           Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Favorite {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, propertyId])
+  @@map("favorites")
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  filters   Json
+  alert     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("saved_searches")
+}
+
+model Message {
+  id         String        @id @default(cuid())
+  userId     String?
+  user       User?         @relation("UserMessages", fields: [userId], references: [id])
+  senderId   String?
+  sender     User?         @relation("SentMessages", fields: [senderId], references: [id])
+  propertyId String?
+  name       String
+  email      String
+  phone      String?
+  subject    String?
+  body       String
+  status     MessageStatus @default(NEW)
+  whatsapp   Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+
+  @@map("messages")
+}
+
+model Lead {
+  id         String   @id @default(cuid())
+  agentId    String
+  agent      Agent    @relation(fields: [agentId], references: [id])
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
+  name       String
+  email      String
+  phone      String
+  source     String   @default("inquiry")
+  status     String   @default("new")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("leads")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
+  agentId    String?
+  agent      Agent?   @relation(fields: [agentId], references: [id])
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id])
+  propertyId String?
+  property   Property?    @relation(fields: [propertyId], references: [id])
+  reason     String
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+
+  @@map("reports")
+}
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String
+  coverImage  String?
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  published   Boolean  @default(false)
+  tags        String   @default("[]")
+  metaTitle   String?
+  metaDescription String?
+  views       Int      @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("blog_posts")
+}
+
+model AreaGuide {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  content     String
+  cityId      String
+  city        City     @relation(fields: [cityId], references: [id])
+  areaId      String?
+  area        Area?    @relation(fields: [areaId], references: [id])
+  coverImage  String?
+  avgPrice    Float?
+  propertyCount Int    @default(0)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("area_guides")
+}
+
+model Advertisement {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String
+  linkUrl   String
+  position  String
+  active    Boolean  @default(true)
+  startsAt  DateTime @default(now())
+  endsAt    DateTime?
+  clicks    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("advertisements")
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  event      String
+  entityType String?
+  entityId   String?
+  userId     String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@map("analytics_events")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String
+  read      Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model ChatRoom {
+  id           String   @id @default(cuid())
+  propertyId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@map("chat_rooms")
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  content   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("chat_messages")
+}
