@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.next/
+backend/.env
+*.log
+.DS_Store
+coverage/
+.turbo/
+config.bat
